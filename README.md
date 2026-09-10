@@ -103,6 +103,6 @@ Here are my other Omarchy plugins:
 - [Better Menu](https://github.com/BibekBhusal0/omarchy-better-menu) - fuzzy menu with app grid, calculator and web search
 - [Obsidian Search](https://github.com/BibekBhusal0/omarchy-obsidian-search) - fuzzy-search your Obsidian vault
 - [Readest](https://github.com/BibekBhusal0/omarchy-readest) - fuzzy-search your Readest library
-- [yt-dlp](https://github.com/BibekBhusal0/omarchy-ytdl) - video downloads with progress and history
+- [Youtube Video Downloader](https://github.com/BibekBhusal0/omarchy-ytdl) - video downloads with progress and history
 
 Please give a star if you find them useful!
