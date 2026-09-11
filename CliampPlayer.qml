@@ -40,8 +40,12 @@ Item {
   readonly property bool shuffleSupported: available
   readonly property bool loopSupported: available
 
+  property string cliampBin: ""
+
   function run(cmd) {
-    Quickshell.execDetached(["cliamp", cmd]);
+    if (root.cliampBin === "")
+      return;
+    Quickshell.execDetached([root.cliampBin, cmd]);
   }
 
   function play() {
@@ -60,15 +64,56 @@ Item {
     run("prev");
   }
   function setShuffle(on) {
-    Quickshell.execDetached(["cliamp", "shuffle", on ? "on" : "off"]);
+    if (root.cliampBin === "")
+      return;
+    Quickshell.execDetached([root.cliampBin, "shuffle", on ? "on" : "off"]);
   }
   function setRepeat(mode) {
-    Quickshell.execDetached(["cliamp", "repeat", mode]);
+    if (root.cliampBin === "")
+      return;
+    Quickshell.execDetached([root.cliampBin, "repeat", mode]);
+  }
+  function seekTo(seconds) {
+    if (root.cliampBin === "")
+      return false;
+    Quickshell.execDetached([root.cliampBin, "seek", String(Math.floor(Number(seconds) || 0))]);
+    return true;
+  }
+
+  function acceptCliampBin(raw) {
+    var line = String(raw || "").split("\n")[0].trim();
+    if (line === "" || line.charAt(0) !== "/" || line.length > 1024)
+      return "";
+    if (/[\u0000-\u001F\u007F]/.test(line))
+      return "";
+    return line;
+  }
+
+  function resolveCliamp() {
+    if (resolveProc.running)
+      return;
+    resolveProc.collected = "";
+    resolveProc.collectedBytes = 0;
+    resolveProc.overflowed = false;
+    resolveProc.timedOut = false;
+    resolveProc.command = ["/usr/bin/sh", "-c", "p=$(command -v cliamp 2>/dev/null); [ -n \"$p\" ] && [ -x \"$p\" ] && printf '%s' \"$p\""];
+    resolveProc.running = true;
+    resolveWatchdog.restart();
+  }
+
+  function killResolveProc() {
+    try {
+      resolveProc.signal(9);
+    } catch (e) {
+    }
+    resolveProc.running = false;
   }
 
   property int maxOutputBytes: 32768
   property int maxFieldChars: 512
   property int pollTimeoutMs: 1500
+  property int maxResolveBytes: 4096
+  property int resolveTimeoutMs: 3000
 
   function killStatusProc() {
     try {
@@ -88,13 +133,18 @@ Item {
   }
 
   function poll() {
+    if (root.cliampBin === "") {
+      root.clear();
+      root.resolveCliamp();
+      return;
+    }
     if (statusProc.running)
       return;
     statusProc.collected = "";
     statusProc.collectedBytes = 0;
     statusProc.overflowed = false;
     statusProc.timedOut = false;
-    statusProc.command = ["cliamp", "status", "--json"];
+    statusProc.command = [root.cliampBin, "status", "--json"];
     statusProc.running = true;
     pollWatchdog.restart();
   }
@@ -265,5 +315,71 @@ Item {
     }
   }
 
-  Component.onCompleted: root.poll()
+  Timer {
+    id: resolveWatchdog
+    interval: root.resolveTimeoutMs
+    repeat: false
+    onTriggered: {
+      if (resolveProc.running) {
+        resolveProc.timedOut = true;
+        resolveProc.collected = "";
+        resolveProc.collectedBytes = 0;
+        root.killResolveProc();
+      }
+    }
+  }
+
+  Process {
+    id: resolveProc
+    property string collected: ""
+    property int collectedBytes: 0
+    property bool overflowed: false
+    property bool timedOut: false
+    stdout: SplitParser {
+      onRead: function (data) {
+        if (resolveProc.overflowed || resolveProc.timedOut)
+          return;
+        var chunk = String(data + "\n");
+        if (resolveProc.collectedBytes + chunk.length > root.maxResolveBytes) {
+          resolveProc.overflowed = true;
+          resolveProc.collected = "";
+          resolveProc.collectedBytes = 0;
+          root.killResolveProc();
+          return;
+        }
+        resolveProc.collected += chunk;
+        resolveProc.collectedBytes += chunk.length;
+      }
+    }
+    stderr: SplitParser {
+      onRead: function (data) {
+        if (resolveProc.overflowed || resolveProc.timedOut)
+          return;
+        resolveProc.collectedBytes += String(data + "\n").length;
+        if (resolveProc.collectedBytes > root.maxResolveBytes) {
+          resolveProc.overflowed = true;
+          resolveProc.collected = "";
+          resolveProc.collectedBytes = 0;
+          root.killResolveProc();
+        }
+      }
+    }
+    onExited: function (exitCode) {
+      resolveWatchdog.stop();
+      var failed = resolveProc.overflowed || resolveProc.timedOut;
+      var output = String(resolveProc.collected);
+      resolveProc.collected = "";
+      resolveProc.collectedBytes = 0;
+      resolveProc.overflowed = false;
+      resolveProc.timedOut = false;
+      if (!failed && exitCode === 0)
+        root.cliampBin = root.acceptCliampBin(output);
+      if (root.cliampBin !== "")
+        root.poll();
+      else
+        root.clear();
+    }
+  }
+
+  Component.onCompleted: root.resolveCliamp()
 }

@@ -428,8 +428,8 @@ Panel {
                 var delta = val - root.activePlayer.position;
                 if (Math.abs(delta) > 0.1)
                   root.activePlayer.seek(delta);
-              } else if (root.isCliamp) {
-                Quickshell.execDetached(["cliamp", "seek", String(Math.floor(val))]);
+              } else if (root.isCliamp && root.mediaService) {
+                root.mediaService.seekCliamp(val);
               }
               Qt.callLater(function () {
                   root._dragging = false;

@@ -176,6 +176,10 @@ Item {
     return playerForKey(targetKey) || activePlayer;
   }
 
+  function seekCliamp(seconds) {
+    return cliampPlayer.seekTo(seconds);
+  }
+
   function toggleShuffle(targetKey) {
     var player = targetForToggle(targetKey);
     if (!player || !playerShuffleSupported(player))
