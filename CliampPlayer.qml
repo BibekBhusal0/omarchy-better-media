@@ -66,14 +66,44 @@ Item {
     Quickshell.execDetached(["cliamp", "repeat", mode]);
   }
 
-  function poll() {
+  property int maxOutputBytes: 32768
+  property int maxFieldChars: 512
+  property int pollTimeoutMs: 1500
+
+  function killStatusProc() {
+    try {
+      statusProc.signal(9);
+    } catch (e) {
+    }
     statusProc.running = false;
+  }
+
+  function boundedField(value) {
+    if (value === undefined || value === null)
+      return "";
+    var s = String(value);
+    if (s.length > root.maxFieldChars)
+      return null;
+    return s;
+  }
+
+  function poll() {
+    if (statusProc.running)
+      return;
     statusProc.collected = "";
+    statusProc.collectedBytes = 0;
+    statusProc.overflowed = false;
+    statusProc.timedOut = false;
     statusProc.command = ["cliamp", "status", "--json"];
     statusProc.running = true;
+    pollWatchdog.restart();
   }
 
   function parseStatus(raw) {
+    if (String(raw || "").length > root.maxOutputBytes) {
+      clear();
+      return;
+    }
     var text = String(raw || "").trim();
     var data = {};
     if (text !== "") {
@@ -83,28 +113,63 @@ Item {
         console.warn("Cliamp: ignoring invalid status:", error);
       }
     }
-    if (data.ok !== true) {
+    if (!data || typeof data !== "object" || Array.isArray(data) || data.ok !== true) {
       clear();
       return;
     }
+    if (Object.keys(data).length > 64) {
+      clear();
+      return;
+    }
+    var newState = boundedField(data.state);
+    var track = data.track;
+    if (track === undefined || track === null)
+      track = {};
+    if (typeof track !== "object" || Array.isArray(track)) {
+      clear();
+      return;
+    }
+    if (Object.keys(track).length > 32) {
+      clear();
+      return;
+    }
+    var title = boundedField(track.title);
+    var artist = boundedField(track.artist);
+    var album = boundedField(track.album);
+    var artUrl = boundedField(track.artUrl);
+    var playlistName = boundedField(data.playlist);
+    var repeatRaw = boundedField(data.repeat);
+    if (newState === null || title === null || artist === null || album === null || artUrl === null || playlistName === null || repeatRaw === null) {
+      clear();
+      return;
+    }
+    if (newState === "")
+      newState = "stopped";
     available = true;
-    var newState = String(data.state || "stopped");
-    var track = data.track || {};
+    var pos = Number(data.position);
+    var dur = Number(data.duration);
+    var vol = Number(data.volume);
+    if (!isFinite(pos))
+      pos = 0;
+    if (!isFinite(dur))
+      dur = 0;
+    if (!isFinite(vol))
+      vol = 0;
     state = newState;
     isPlaying = newState === "playing";
-    trackTitle = String(track.title || "");
-    trackArtist = String(track.artist || "");
-    trackAlbum = String(track.album || "");
-    trackArtUrl = String(track.artUrl || "");
-    playlist = String(data.playlist || "");
-    position = Number(data.position) || 0;
-    duration = Number(data.duration) || 0;
-    volume = Number(data.volume) || 0;
+    trackTitle = title;
+    trackArtist = artist;
+    trackAlbum = album;
+    trackArtUrl = artUrl;
+    root.playlist = playlistName;
+    root.position = Math.max(0, Math.min(86400, pos));
+    root.duration = Math.max(0, Math.min(86400, dur));
+    root.volume = Math.max(0, Math.min(100, vol));
     shuffle = data.shuffle === true;
-    var repeatRaw = String(data.repeat || "").toLowerCase();
-    if (repeatRaw.indexOf("one") !== -1)
+    var repeatLower = repeatRaw.toLowerCase();
+    if (repeatLower.indexOf("one") !== -1)
       repeat = "one";
-    else if (repeatRaw.indexOf("all") !== -1)
+    else if (repeatLower.indexOf("all") !== -1)
       repeat = "all";
     else
       repeat = "off";
@@ -133,17 +198,68 @@ Item {
     onTriggered: root.poll()
   }
 
+  Timer {
+    id: pollWatchdog
+    interval: root.pollTimeoutMs
+    repeat: false
+    onTriggered: {
+      if (statusProc.running) {
+        statusProc.timedOut = true;
+        statusProc.collected = "";
+        statusProc.collectedBytes = 0;
+        root.killStatusProc();
+        root.clear();
+      }
+    }
+  }
+
   Process {
     id: statusProc
     property string collected: ""
+    property int collectedBytes: 0
+    property bool overflowed: false
+    property bool timedOut: false
     stdout: SplitParser {
       onRead: function (data) {
-        statusProc.collected += data + "\n";
+        if (statusProc.overflowed || statusProc.timedOut)
+          return;
+        var chunk = String(data + "\n");
+        if (statusProc.collectedBytes + chunk.length > root.maxOutputBytes) {
+          statusProc.overflowed = true;
+          statusProc.collected = "";
+          statusProc.collectedBytes = 0;
+          root.killStatusProc();
+          return;
+        }
+        statusProc.collected += chunk;
+        statusProc.collectedBytes += chunk.length;
+      }
+    }
+    stderr: SplitParser {
+      onRead: function (data) {
+        if (statusProc.overflowed || statusProc.timedOut)
+          return;
+        statusProc.collectedBytes += String(data + "\n").length;
+        if (statusProc.collectedBytes > root.maxOutputBytes) {
+          statusProc.overflowed = true;
+          statusProc.collected = "";
+          statusProc.collectedBytes = 0;
+          root.killStatusProc();
+        }
       }
     }
     onExited: function (exitCode) {
-      if (exitCode === 0 && String(statusProc.collected).trim() !== "")
-        root.parseStatus(statusProc.collected);
+      pollWatchdog.stop();
+      var failed = statusProc.overflowed || statusProc.timedOut;
+      var output = String(statusProc.collected);
+      statusProc.collected = "";
+      statusProc.collectedBytes = 0;
+      statusProc.overflowed = false;
+      statusProc.timedOut = false;
+      if (failed)
+        root.clear();
+      else if (exitCode === 0 && output.trim() !== "")
+        root.parseStatus(output);
       else
         root.clear();
     }
