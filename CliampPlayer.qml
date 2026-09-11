@@ -82,9 +82,7 @@ Item {
 
   function acceptCliampBin(raw) {
     var line = String(raw || "").split("\n")[0].trim();
-    if (line === "" || line.charAt(0) !== "/" || line.length > 1024)
-      return "";
-    if (/[\u0000-\u001F\u007F]/.test(line))
+    if (line !== "/usr/bin/cliamp" && line !== "/usr/local/bin/cliamp")
       return "";
     return line;
   }
@@ -96,7 +94,7 @@ Item {
     resolveProc.collectedBytes = 0;
     resolveProc.overflowed = false;
     resolveProc.timedOut = false;
-    resolveProc.command = ["/usr/bin/sh", "-c", "p=$(command -v cliamp 2>/dev/null); [ -n \"$p\" ] && [ -x \"$p\" ] && printf '%s' \"$p\""];
+    resolveProc.command = ["/usr/bin/sh", "-c", "ok_path() { p=\"$1\"; [ -f \"$p\" ] && [ ! -L \"$p\" ] && [ -x \"$p\" ] || return 1; [ \"$(stat -c %u \"$p\")\" = \"0\" ] || return 1; [ $((8#$(stat -c %a \"$p\") & 022)) -eq 0 ] || return 1; d=\"$(dirname \"$p\")\"; while [ \"$d\" != \"/\" ]; do [ -d \"$d\" ] && [ ! -L \"$d\" ] && [ -x \"$d\" ] || return 1; [ \"$(stat -c %u \"$d\")\" = \"0\" ] || return 1; [ $((8#$(stat -c %a \"$d\") & 022)) -eq 0 ] || return 1; d=\"$(dirname \"$d\")\"; done; [ \"$(stat -c %u /)\" = \"0\" ] || return 1; return 0; }; for c in /usr/bin/cliamp /usr/local/bin/cliamp; do if ok_path \"$c\"; then printf '%s' \"$c\"; break; fi; done"];
     resolveProc.running = true;
     resolveWatchdog.restart();
   }
