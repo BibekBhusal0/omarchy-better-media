@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "bibek.media",
   "name": "Better Media",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "author": "Bibek Bhusal",
   "description": "MPRIS media control service with cliamp headless support",
   "homepage": "https://github.com/BibekBhusal0/omarchy-better-media",
