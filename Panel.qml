@@ -2,6 +2,7 @@ import QtQuick
 import qs.Ui
 import qs.Commons
 import Quickshell.Services.Mpris
+import "shared" as MediaShared
 
 Panel {
   id: root
@@ -18,7 +19,7 @@ Panel {
     return false;
   }
 
-  readonly property var mediaService: bar?.shell?.firstPartyServiceFor("bibek.media")
+  readonly property var mediaService: (bar?.shell?.firstPartyServiceFor("bibek.media")) || MediaShared.ServiceBridge.service
   readonly property var activePlayer: mediaService ? mediaService.activePlayer : null
   readonly property var sourcePlayers: mediaService ? mediaService.sourcePlayers : []
 
