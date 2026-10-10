@@ -92,6 +92,7 @@ BarWidget {
       Text {
         id: labelText
         text: root.title
+        textFormat: Text.PlainText
         color: root.bar.barForeground
         font.family: root.bar.fontFamily
         font.pixelSize: Style.font.body

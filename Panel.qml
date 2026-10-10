@@ -355,6 +355,7 @@ Panel {
 
             Text {
               text: root.title || "Nothing playing"
+              textFormat: Text.PlainText
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.subtitle
@@ -365,6 +366,7 @@ Panel {
 
             Text {
               text: root.artist
+              textFormat: Text.PlainText
               color: root.secondaryText
               font.family: root.fontFamily
               font.pixelSize: Style.font.bodySmall
@@ -375,6 +377,7 @@ Panel {
 
             Text {
               text: root.album
+              textFormat: Text.PlainText
               color: root.tertiaryText
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -586,6 +589,7 @@ Panel {
 
                   Text {
                     text: sourceRow.sourceTitle
+                    textFormat: Text.PlainText
                     color: sourceRow.selected ? root.accent : root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.bodySmall
@@ -596,6 +600,7 @@ Panel {
 
                   Text {
                     text: sourceRow.sourceDetail
+                    textFormat: Text.PlainText
                     color: root.secondaryText
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
